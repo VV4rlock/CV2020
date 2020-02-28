@@ -7,6 +7,24 @@ logging.basicConfig(format="[%(filename)s: %(funcName)s] %(message)s", level=log
 logger = logging.getLogger(__name__)
 SMALL_SCREEN = False
 
+IMAGE_PATH = r"house.jpg"
+N = 2
+
+ONES = np.ones((2 * N + 1, 2 * N + 1), dtype=np.float32)
+GAUSSIAN = np.array([  [ 1,  4,  7,  4,  1],
+                       [ 4, 16, 26, 16,  4],
+                       [ 7, 26, 41, 26,  7],
+                       [ 4, 16, 26, 16,  4],
+                       [ 1,  4,  7,  4,  1]], dtype=np.float32)
+
+LUCAS_CANADE = (np.array([-1, 8, 0, -8, 1]) / 12).reshape(-1, 1)
+PREWITT = np.array([[1, 1, 1],
+                    [0, 0, 0],
+                    [-1, -1, -1]])
+SOBEL = np.array([[1, 2, 1],
+                    [0, 0, 0],
+                    [-1, -2, -1]])
+
 
 def show_image(img, name='image'):
     #cv2.destroyAllWindows()
@@ -20,6 +38,4 @@ def show_image(img, name='image'):
     cv2.destroyAllWindows()
 
 def apply_filter(image, filter) -> np.ndarray:
-    res = cv2.filter2D(image, -1, filter)
-    logger.debug("res min={} max={}".format(res.min(), res.max()))
-    return res
+    return cv2.filter2D(image, -1, filter)
