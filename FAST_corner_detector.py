@@ -1,35 +1,20 @@
 from config import *
 
-T = 100
+T = 120
+FAST_R = 3
+ORIENTED_R = 9
+scales = [1, 1/2, 1/4, 1/8]
 
-pixels = [(-3, 0), (-3, 1), (-2, 2), (-1, 3), (0, 3), (1, 3), (2, 2), (3, 1),
-          (3, 0), (3, -1), (2, -2), (1, -3), (0, -3), (-1, -3), (-2, -2), (-3, -1)]
-'''сори, этот вариант только для радиуса 3))) исправим для любого, а пока так. 
-нужно генерировать массив pixels в порядек обхода. 
-Вычислять константы n (количество последовательных пикелей) 
-А также пока непонятно как из маски и изображения сгенерировать массив 16 пикселей в нужном порятке, а не в порядке 
-    слева направо и сверху вниз) 
-
-Этот вариант работает достаточно быстро, но можно попытаться улучшить с помощью вычисления суммы
-    на изображении после наложения маски, отбрасывая сразу все, кроме 13 и 14 (для них уже делать полную проверку 
-    на нахождение последовательности). Не знаю будет ли это намного эффективнее
-'''
-
-R = 3
-
-
-def FAST(image: np.ndarray):
-    grey_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.int16)
+def FAST(grey_image: np.ndarray) -> (list, list):
     H, W = grey_image.shape
-    res = []
 
+    R = max(FAST_R, ORIENTED_R)
     fast_1 = grey_image[0: H - 2 * R, R: W - R]
     fast_5 = grey_image[R: H - R, 2 * R: W]
     fast_9 = grey_image[2 * R: H, R: W - R]
     fast_13 = grey_image[R: H - R, 0: W - 2 * R]
-    Ip_arr = grey_image[R:H-R, R:W-R]
+    Ip_arr = grey_image[R:H - R, R:W - R]
 
-    #print(fast_1.shape, fast_5.shape, fast_9.shape, fast_13.shape, Ip_arr.shape)
     less = (Ip_arr - fast_1 > T).astype(np.int8) + \
            (Ip_arr - fast_5 > T) + \
            (Ip_arr - fast_9 > T) + \
@@ -40,105 +25,125 @@ def FAST(image: np.ndarray):
               (fast_9 - Ip_arr > T) + \
               (fast_13 - Ip_arr > T)
 
-    #print(less, greater)
-    X, Y = np.mgrid[-R:R + 1, -R:R + 1]
-    mask = (X ** 2 + Y ** 2 <= R ** 2 + 1) * ((R - 1) ** 2 + 1 < X ** 2 + Y ** 2)
+    Y, X = np.mgrid[-FAST_R:FAST_R + 1, -FAST_R:FAST_R + 1]
+    mask = (X ** 2 + Y ** 2 <= FAST_R ** 2 + 1) * ((FAST_R - 1) ** 2 + 2 < X ** 2 + Y ** 2)
+    keep_len = 0
+    route = [[], [], [], []]
+    for i, j in ((y, x) for x in range(FAST_R, 0, -1) for y in range(FAST_R + 1)):
+        if mask[FAST_R + i, FAST_R + j]:
+            keep_len += 1
+            route[0].append((-j, i))
+            route[1].append((i, j))
+            route[2].append((j, -i))
+            route[3].append((-i, -j))
+    route = sum(route, [])
+    keep_len *= 3
 
-
-    #show_image(mask)
-    #print(mask.shape)
-    #print(grey_image.shape)
-    #print(np.squeeze(np.where((less > 2).reshape(-1))))
+    res_less = []
     for i in np.squeeze(np.where((less > 2).reshape(-1))):
         x, y = i // (W - 2 * R), i % (W - 2 * R)
-        '''
-        проверка противоположных не работает:
-           1 1 1
-         0   |   1
-        1    |    0
-        1---------0
-        1    |    0
-         1   |   1
-           1 1 1
-        '''
-        '''
-        print(x, y, (grey_image[x: x + 2 * R + 1, y: y + 2 * R + 1])[mask].shape)
-        temp = (Ip_arr[x, y] - grey_image[x: x + 2 * R + 1, y: y + 2 * R + 1][mask] > T).astype(np.int8)
-        s = temp.sum()
-        if s > 14:
-            res.append((x+R, y+R))
+
+        count, first_seq, last_check = 0, None, True
+        temp = Ip_arr[x, y] - grey_image[x: x + 2 * FAST_R + 1, y: y + 2 * FAST_R + 1] * mask > T
+
+        if temp.sum() < keep_len:
             continue
-        if temp.sum() < 12:
-            continue
-        '''
-        count = 0
-        # print(grey_image[x: x + 2 * R + 1, y: y + 2 * R + 1])
-        first_seq = None
-        last_check = True
-        temp = Ip_arr[x, y] - grey_image[x: x + 2 * R + 1, y: y + 2 * R + 1] * mask > T
-        for ix, iy in pixels:
-            if (temp[ix + R, iy + R] == 1):
+
+        for ix, iy in route:
+            if (temp[ix + FAST_R, iy + FAST_R] == 1):
                 count += 1
             else:
                 if first_seq is None:
                     first_seq = count
                 count = 0
 
-            if (count == 12):
-                res.append((x + R, y + R))
+            if (count == keep_len):
+                res_less.append((x + FAST_R, y + FAST_R))
                 last_check = False
                 break
-        if last_check and count + first_seq >= 12:
-            res.append((x + R, y + R))
+        if last_check and count + first_seq >= keep_len:
+            res_less.append((x + FAST_R, y + FAST_R))
 
-
+    res_greater = []
     for i in np.squeeze(np.where((greater > 2).reshape(-1))):
         x, y = i // (W - 2 * R), i % (W - 2 * R)
-        '''
-        print(grey_image[x: x + 2 * R + 1, y: y + 2 * R + 1][mask])
-        temp = (grey_image[x: x + 2 * R + 1, y: y + 2 * R + 1][mask] - Ip_arr[x, y] > T).astype(np.int8)
-        s = temp.sum()
-        if s > 14:
-            res.append((x+R, y+R))
+        count, first_seq, last_check = 0, None, True
+        temp = grey_image[x: x + 2 * FAST_R + 1, y: y + 2 * FAST_R + 1] * mask - Ip_arr[x, y] > T
+        if temp.sum() < keep_len:
             continue
-        if temp.sum() < 12:
-            continue
-            '''
-        count = 0
-        #print(grey_image[x: x + 2 * R + 1, y: y + 2 * R + 1])
-        first_seq = None
-        last_check = True
-        temp = grey_image[x: x + 2 * R + 1, y: y + 2 * R + 1] * mask - Ip_arr[x, y] > T
-        for ix, iy in pixels:
-            if (temp[ix + R, iy + R] == 1):
+        for ix, iy in route:
+            if (temp[ix + FAST_R, iy + FAST_R] == 1):
                 count += 1
             else:
                 if first_seq is None:
                     first_seq = count
                 count = 0
 
-            if (count == 12):
-                res.append((x + R, y + R))
+            if ( count == keep_len ):
+                res_greater.append((x + FAST_R, y + FAST_R))
                 last_check = False
                 break
-        if last_check and count + first_seq >= 12:
-            res.append((x + R, y + R))
+        if last_check and count + first_seq >= keep_len:
+            res_greater.append((x + FAST_R, y + FAST_R))
 
-    return res
-
-
+    return res_less, res_greater
 
 
+def oriented_FAST(grey_image: np.ndarray, original_image=None):
+    angles_less, angles_greater = FAST(grey_image)
+    Y, X = np.mgrid[-ORIENTED_R:ORIENTED_R + 1, -ORIENTED_R:ORIENTED_R + 1]
+    mask = (X ** 2 + Y ** 2 <= ORIENTED_R ** 2 + 1).astype(np.int16)
+
+
+    print(len(angles_less))
+    m01 = np.zeros(len(angles_less), dtype=np.int32)
+    m10 = np.zeros(len(angles_less), dtype=np.int32)
+    color = (0, 0, 255)
+    line_c = (0, 255, 0)
+    for index, coord in enumerate(angles_less):
+        part = grey_image[coord[0]-ORIENTED_R:coord[0]+ORIENTED_R + 1, coord[1] - ORIENTED_R: coord[1] + ORIENTED_R + 1]
+        m01[index] = (mask * part * Y).sum()
+        m10[index] = (mask * part * X).sum()
+
+        if original_image is not None:
+            l = 10 / (m01[index] ** 2 + m10[index] ** 2) ** 0.5
+            cv2.circle(original_image, (coord[1], coord[0]), 10, color, 1)
+            cv2.line(original_image,
+                     (coord[1],coord[0]), (coord[1]+int(m10[index]*l),coord[0] + int(m01[index]*l)), line_c, 1)
+
+    theta_less = np.arctan2(m01, m10)
+
+    m01 = np.zeros(len(angles_greater), dtype=np.int32)
+    m10 = np.zeros(len(angles_greater), dtype=np.int32)
+    color = (0, 255, 255)
+    for index, coord in enumerate(angles_greater):
+        part = grey_image[coord[0]-ORIENTED_R:coord[0]+ORIENTED_R + 1, coord[1] - ORIENTED_R: coord[1] + ORIENTED_R + 1]
+        m01[index] = (mask * part * Y).sum()
+        m10[index] = (mask * part * X).sum()
+
+        if original_image is not None:
+            l = 10 / (m01[index] ** 2 + m10[index] ** 2) ** 0.5
+            cv2.circle(original_image, (coord[1], coord[0]), 10, color, 1)
+            cv2.line(original_image,
+                     (coord[1], coord[0]), (coord[1] + int(m10[index] * l), coord[0] + int(m01[index] * l)), line_c, 1)
+    theta_greater = np.arctan2(m01, m10)
+
+    if original_image is not None:
+        show_image(original_image)
+
+    return ((angles_less, theta_less), (angles_greater, theta_greater))
 
 
 if __name__ == "__main__":
-    img = cv2.imread(IMAGE_PATH)
-    #img = np.zeros((10, 10, 3), dtype=np.uint8) + 128
-    #img[3:7,3:7,:] = np.array([0,0,0])
-    angles = FAST(img)
-    color = (0, 0, 255)
-    for y, x in angles:
-        color = (0, 0, 255)
-        cv2.circle(img, (x, y), 10, color, 2)
-    show_image(img)
+    img_input = cv2.imread(IMAGE_PATH)
+    res = {}
+    for scale in scales:
+        img = cv2.resize(img_input.copy(), (int(img_input.shape[1] * scale), int(img_input.shape[0] * scale)))
+        grey_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.int16)
+        res[scale] = oriented_FAST(grey_image, img)
+
+    print(res)
+    #angles_less, angles_greater = FAST(grey_image)
+
+
 
