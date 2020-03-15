@@ -1,7 +1,7 @@
 from config import *
 
-T = 120
-FAST_R = 3
+T = 100
+FAST_R = 9
 ORIENTED_R = 9
 scales = [1, 1/2, 1/4, 1/8]
 
