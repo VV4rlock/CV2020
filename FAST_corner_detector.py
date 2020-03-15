@@ -136,6 +136,7 @@ def oriented_FAST(grey_image: np.ndarray, original_image=None):
 
 if __name__ == "__main__":
     img_input = cv2.imread(IMAGE_PATH)
+    print(img_input)
     res = {}
     for scale in scales:
         img = cv2.resize(img_input.copy(), (int(img_input.shape[1] * scale), int(img_input.shape[0] * scale)))

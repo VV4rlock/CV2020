@@ -5,7 +5,7 @@ K = 0.05
 T = 100
 
 
-def shi_tomasi_response(a,b,c):
+def shi_tomasi_response(a, b, c):
     return (a + c - (4*b*b + (a-c)**2) ** 0.5) / 2
 
 
@@ -75,8 +75,8 @@ def compare(img1, img2):
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
-def harris_corner_detection(img: np.ndarray):
-    grey_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+def harris_response(grey_image):
     grey_image_work = grey_image.astype(np.float64)
     Ix = filter(grey_image_work, x_kernel)
     Iy = filter(grey_image_work, y_kernel)
@@ -87,6 +87,13 @@ def harris_corner_detection(img: np.ndarray):
 
     response = RESPONSE_FUNC(Sx2, Sxy, Sy2)
     response = (normalize(NMS(response)) * 255).astype(np.uint8)
+    return response
+
+
+def harris_corner_detection(img: np.ndarray):
+    grey_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    response = harris_response(grey_image)
+    #show_image(response)
     response[response < T] = 0
     #hist, edges = np.histogram(response, range(257))
     #plt.hist(response)
@@ -101,7 +108,6 @@ def harris_corner_detection(img: np.ndarray):
         #cv2.rectangle(grey_image, (x, y), (x + w, y + h), (0, 0, 0), 2)
         cv2.circle(img, (x + w//2, y + h // 2), 10, color, 2)
     show_image(img)
-
 
 
 

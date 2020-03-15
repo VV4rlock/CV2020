@@ -7,7 +7,7 @@ logging.basicConfig(format="[%(filename)s: %(funcName)s] %(message)s", level=log
 logger = logging.getLogger(__name__)
 SMALL_SCREEN = False
 
-IMAGE_PATH = r"house.jpg"
+IMAGE_PATH = r"shape.png"
 N = 2
 
 ONES = np.ones((2 * N + 1, 2 * N + 1), dtype=np.float32)
