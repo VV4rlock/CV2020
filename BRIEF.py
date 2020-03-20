@@ -38,7 +38,7 @@ class RotatedBRIEF:
             keypoint_pos1 = (patch1[:, 1] + coord[0], patch1[:, 0] + coord[1])
             keypoint_pos2 = (patch2[:, 1] + coord[0], patch2[:, 0] + coord[1])
             descriptor = image[keypoint_pos1] < image[keypoint_pos2]
-            desctiptors.append(descriptor)
+            desctiptors.append(descriptor.astype(np.uint8))
         return desctiptors
 
 
@@ -47,5 +47,5 @@ if __name__ == "__main__":
     grey_image = cv2.cvtColor(img_input, cv2.COLOR_BGR2GRAY).astype(np.int16)
     less, greater = oriented_FAST(grey_image)
     BRIEF = RotatedBRIEF(9, 32)
-    less_descriptors = BRIEF(grey_image, less[0], less[1])
+    less_descriptors = BRIEF(grey_image, less)
     print(less_descriptors)

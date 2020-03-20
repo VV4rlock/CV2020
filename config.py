@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 SMALL_SCREEN = False
 
 IMAGE_PATH = r"shape.png"
+#IMAGE_PATH = r"house.jpg"
 N = 2
 
 ONES = np.ones((2 * N + 1, 2 * N + 1), dtype=np.float32)

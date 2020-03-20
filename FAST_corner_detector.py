@@ -1,14 +1,14 @@
 from config import *
 
-T = 100
-FAST_R = 9
-ORIENTED_R = 9
 scales = [1, 1/2, 1/4, 1/8]
 
-def FAST(grey_image: np.ndarray) -> (list, list):
+def FAST(grey_image: np.ndarray, R=9, t=100, offset=0) -> (list, list):
     H, W = grey_image.shape
 
-    R = max(FAST_R, ORIENTED_R)
+    T = t
+    FAST_R = R
+    R = max(FAST_R, offset)
+
     fast_1 = grey_image[0: H - 2 * R, R: W - R]
     fast_5 = grey_image[R: H - R, 2 * R: W]
     fast_9 = grey_image[2 * R: H, R: W - R]
@@ -58,11 +58,11 @@ def FAST(grey_image: np.ndarray) -> (list, list):
                 count = 0
 
             if (count == keep_len):
-                res_less.append((x + FAST_R, y + FAST_R))
+                res_less.append((x + R, y + R))
                 last_check = False
                 break
         if last_check and count + first_seq >= keep_len:
-            res_less.append((x + FAST_R, y + FAST_R))
+            res_less.append((x + R, y + R))
 
     res_greater = []
     for i in np.squeeze(np.where((greater > 2).reshape(-1))):
@@ -80,22 +80,23 @@ def FAST(grey_image: np.ndarray) -> (list, list):
                 count = 0
 
             if ( count == keep_len ):
-                res_greater.append((x + FAST_R, y + FAST_R))
+                res_greater.append((x + R, y + R))
                 last_check = False
                 break
         if last_check and count + first_seq >= keep_len:
-            res_greater.append((x + FAST_R, y + FAST_R))
+            res_greater.append((x + R, y + R))
 
     return res_less, res_greater
 
 
-def oriented_FAST(grey_image: np.ndarray, original_image=None):
-    angles_less, angles_greater = FAST(grey_image)
+def oriented_FAST(grey_image: np.ndarray, R=9, fast_radius=9, fast_threshold=100, offset=0, original_image=None):
+    ORIENTED_R = R
+    angles_less, angles_greater = FAST(grey_image, R=fast_radius, t=fast_threshold, offset=offset)
     Y, X = np.mgrid[-ORIENTED_R:ORIENTED_R + 1, -ORIENTED_R:ORIENTED_R + 1]
     mask = (X ** 2 + Y ** 2 <= ORIENTED_R ** 2 + 1).astype(np.int16)
 
 
-    print(len(angles_less))
+    #print(len(angles_less))
     m01 = np.zeros(len(angles_less), dtype=np.int32)
     m10 = np.zeros(len(angles_less), dtype=np.int32)
     color = (0, 0, 255)
@@ -131,7 +132,7 @@ def oriented_FAST(grey_image: np.ndarray, original_image=None):
     if original_image is not None:
         show_image(original_image)
 
-    return ((angles_less, theta_less), (angles_greater, theta_greater))
+    return (angles_less, theta_less, angles_greater, theta_greater)
 
 
 if __name__ == "__main__":
@@ -141,10 +142,10 @@ if __name__ == "__main__":
     for scale in scales:
         img = cv2.resize(img_input.copy(), (int(img_input.shape[1] * scale), int(img_input.shape[0] * scale)))
         grey_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.int16)
-        res[scale] = oriented_FAST(grey_image, img)
+        res[scale] = oriented_FAST(grey_image, original_image=img)
 
     print(res)
-    #angles_less, angles_greater = FAST(grey_image)
+    #ales_less, angles_greaterng = FAST(grey_image)
 
 
 
