@@ -1,52 +1,98 @@
 from config import *
 from FAST_corner_detector import oriented_FAST
 
+PRINT_PATCH = False
 class RotatedBRIEF:
     modes = ["GI", "GIII"]
 
-    def __init__(self, S, bitsize, mode="GIII"):
+    def __init__(self, S=31, bitsize=256, mode="GIII"):
         np.random.seed(1)
         assert mode in self.modes
-        self.R = S // 2 - 1
-        X = np.zeros((bitsize, 2))
-        Y = np.zeros((bitsize, 2))
+        self.R = S // 2
+        self.X = np.zeros((bitsize, 2))
+        self.Y = np.zeros((bitsize, 2))
         if mode == self.modes[0]:
-            x_random_func = lambda: np.random.uniform(-S / 2, S / 2, (1, 2))
-            y_random_func = lambda: np.random.uniform(-S / 2, S / 2, (1, 2))
+            self.random_func = lambda x: (np.random.uniform(-S / 2, S / 2, x), np.random.uniform(-S / 2, S / 2, x))
         elif mode == self.modes[1]:
-            x_random_func = lambda: np.random.normal(0, S * S / 25, (1, 2))
-            y_random_func = lambda: np.random.normal(0, S * S / 100, (1, 2))
+            def random_func(x):
+                res0 = np.random.normal(0, S * S / 25, x)
+                return res0, np.random.normal(res0, S*S/100, x)
+            self.random_func=random_func
         else:
             raise Exception("WTF?!")
         index = 0
         while index < bitsize:
-            x = x_random_func()
-            y = y_random_func()
-            if max(np.abs(x).max(), np.abs(x).max()) < self.R:
-                X[index] = x
-                Y[index] = y
+            x, y = self.random_func((1, 2))
+            if max(np.abs(x).max(), np.abs(y).max()) <= self.R:
+                self.X[index] = x
+                self.Y[index] = y
                 index += 1
 
-        rot_matrix_by_angle = {a: -cv2.getRotationMatrix2D(center=(0, 0), angle=a, scale=1)[:, :2]
+        if PRINT_PATCH:
+            mul = 27
+            patch_image = np.zeros((S*mul, S*mul))
+
+            for x,y in np.stack(((((self.X + self.R) * mul)).astype(np.uint32), ((self.Y + self.R) * mul).astype(np.uint32)), axis=1):
+                cv2.line(patch_image, (x[1],x[0]), (y[1],y[0]), 100, 1)
+                patch_image[(x[0], x[1])] = 255
+                patch_image[(y[0], y[1])] = 255
+            show_image(patch_image)
+
+
+
+        rot_matrix_by_angle = {a: cv2.getRotationMatrix2D(center=(0, 0), angle=a, scale=1)[:, :2].T
                                for a in range(0, 361, 12)}
         self.coord_by_andle = [(
-                                np.round(np.dot(X, rot_matrix_by_angle[key]).astype(np.int8)),
-                                np.round(np.dot(Y, rot_matrix_by_angle[key]).astype(np.int8))
+                                np.round(np.dot(self.X, rot_matrix_by_angle[key]).astype(np.int8)),
+                                np.round(np.dot(self.Y, rot_matrix_by_angle[key]).astype(np.int8))
                                          ) for key in rot_matrix_by_angle
                                 ]
         rad = np.pi / 180
         self.angles_array = np.array([a * rad for a in rot_matrix_by_angle])
 
+    def is_decorelated(self, decorelated_tests, test):
+        for test in ['place_for_tests_patches']:
+            pass
+
+    def get_decorelated_tests(self, test_patches):
+        T_x = self.random_func((1000, 1))
+        T_y = self.random_func((1000, 1))
+        test_sum = np.zeros(1000, dtype=np.float32)
+        for test_patch in test_patches:
+            test_sum += test_patch[T_x] < test_patch[T_y]
+        test_sum /= len(test_patches)
+        indexes = np.argsort(np.abs(test_sum - .5))
+        R = []
+        for index in indexes:
+            t = T_x[index], T_y[index]
+
+
+
+
+
+    @staticmethod
+    def get_integral_image(image):
+        return np.cumsum(np.cumsum(image.astype(np.float64), axis=1), axis=0)
+
     def __call__(self, image, angles_coord, theta):
         assert len(angles_coord) == len(theta)
         desctiptors = []
+        integral = self.get_integral_image(image) / 25
         for i, coord in enumerate(angles_coord):
             coord = angles_coord[i]
             patch1, patch2 = self.coord_by_andle[np.abs(self.angles_array - theta[i]).argmin()]
-            keypoint_pos1 = (patch1[:, 1] + coord[0], patch1[:, 0] + coord[1])
-            keypoint_pos2 = (patch2[:, 1] + coord[0], patch2[:, 0] + coord[1])
+            #keypoint_pos1 = (patch1[:, 0] + coord[0], patch1[:, 1] + coord[1])
+            #keypoint_pos2 = (patch2[:, 0] + coord[0], patch2[:, 1] + coord[1])
             #print(f"coord: {coord}\n{keypoint_pos1}\n{np.abs(self.angles_array - theta[i]).argmin()}\n{patch1}")
-            descriptor = image[keypoint_pos1] < image[keypoint_pos2]
+            mid1 = integral[(patch1[:, 0] + coord[0] + 2, patch1[:, 1] + coord[1] + 2)] - \
+                integral[(patch1[:, 0] + coord[0] + 2, patch1[:, 1] + coord[1] - 3)] - \
+                integral[(patch1[:, 0] + coord[0] - 3, patch1[:, 1] + coord[1] + 2)] + \
+                integral[(patch1[:, 0] + coord[0] - 3, patch1[:, 1] + coord[1] - 3)]
+            mid2 = integral[(patch2[:, 0] + coord[0] + 2, patch2[:, 1] + coord[1] + 2)] - \
+                   integral[(patch2[:, 0] + coord[0] + 2, patch2[:, 1] + coord[1] - 3)] - \
+                   integral[(patch2[:, 0] + coord[0] - 3, patch2[:, 1] + coord[1] + 2)] + \
+                   integral[(patch2[:, 0] + coord[0] - 3, patch2[:, 1] + coord[1] - 3)]
+            descriptor = mid1 < mid2
             desctiptors.append(descriptor)
         return np.array(desctiptors, dtype=np.uint8)
 

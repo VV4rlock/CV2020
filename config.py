@@ -7,7 +7,7 @@ logging.basicConfig(format="[%(filename)s: %(funcName)s] %(message)s", level=log
 logger = logging.getLogger(__name__)
 SMALL_SCREEN = False
 
-IMAGE_PATH = r"shape.png"
+#IMAGE_PATH = r"shape.png"
 IMAGE_PATH = r"house.jpg"
 
 
