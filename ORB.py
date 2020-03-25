@@ -5,17 +5,18 @@ from FAST_corner_detector import oriented_FAST
 from BRIEF import RotatedBRIEF
 
 class ORB:
-    def __init__(self, S=31, bitsize=256, fast_radius=9, oriented_FAST_radius=15, FAST_threshold = 80, Harris_threshold=100):
+    def __init__(self, S=31, bitsize=256, fast_radius=9, oriented_FAST_radius=20, FAST_threshold = 20, Harris_threshold=110):
         self.FAST_Radius = fast_radius
         self.OFAST_Radius = oriented_FAST_radius
         self.S = S
         self.bitsize = bitsize
         self.FAST_threshold = FAST_threshold
         self.nms_zone = self.FAST_Radius
-        self.get_descriptors = RotatedBRIEF(S, bitsize, mode="GI")
+        self.get_descriptors = RotatedBRIEF(S=S, bitsize=bitsize, mode="GIII")
         self.Harris_threshold = Harris_threshold
-        self.offset = max(int(self.S * 2**.5 // 2) + 2, self.FAST_Radius, self.OFAST_Radius)
-        self.scales = [1, 1/2**0.5, 1/2, 1/(2*2**0.5)]
+        self.offset = max(int(self.S * 2**.5 // 2) + 3, self.FAST_Radius, self.OFAST_Radius)
+        #self.scales = [1, 1/2**0.5, 1/2, 1/(2*2**0.5)]
+        self.scales = [1, 1 / 2 ** 0.5, 1 / 2, 1 / (2 * 2 ** 0.5), 1/4 , 1/(4*2**0.5), 1/8]
 
     def NMS(self, image: np.ndarray, n=9) -> np.ndarray:
         H, W = image.shape
@@ -76,6 +77,7 @@ class ORB:
                 cv2.circle(img_for_show, (coord[1], coord[0]), 10, (0, 255, 0), 1)
             show_image(img_for_show)
             angles = (angles * (image.shape[0] / y_resize, image.shape[1] / x_resize)).astype(np.uint32)
+            #angles = (angles / scale).astype(np.uint32)
             res = np.concatenate((res, angles), axis=0)
             #print(f"restored: \n{res}")
             descriptors_out = np.concatenate((descriptors_out, descriptors), axis=0)
@@ -92,12 +94,24 @@ if __name__ == "__main__":
     img_input = cv2.imread(IMAGE_PATH)
     grey_image = cv2.cvtColor(img_input, cv2.COLOR_BGR2GRAY)
     orb = ORB()
-    angles1, descriptors1 = orb(grey_image)
+    grey_image = np.pad(grey_image, 20, mode='constant')
 
     image_center = tuple(np.array(grey_image.shape[1::-1]) / 2)
-    grey_image_rotated = cv2.warpAffine(grey_image, cv2.getRotationMatrix2D(image_center, 45, 1.0) , grey_image.shape[1::-1], flags=cv2.INTER_LINEAR)
+    grey_image_rotated = cv2.warpAffine(grey_image, cv2.getRotationMatrix2D(image_center, 30, 1.0) , grey_image.shape[1::-1], flags=cv2.INTER_LINEAR)
+    mul=0.8
+    grey_image_rotated = cv2.resize(grey_image_rotated, (int(grey_image_rotated.shape[1]*mul), int(grey_image_rotated.shape[0]*mul)))
+    print(grey_image_rotated.shape)
+    pad_add = ((grey_image.shape[0] - grey_image_rotated.shape[0])//2,
+                                                    (grey_image.shape[1] - grey_image_rotated.shape[1])//2 )
+    grey_image_rotated = np.pad(grey_image_rotated, ((pad_add[0],grey_image.shape[0] - grey_image_rotated.shape[0] - pad_add[0]),
+                                                     (pad_add[1],(grey_image.shape[1] - grey_image_rotated.shape[1] - pad_add[1]))),
+                                                     mode='constant')
+
+    angles1, descriptors1 = orb(grey_image)
     angles2, descriptors2 = orb(grey_image_rotated)
+
     res_image = np.concatenate((grey_image, grey_image_rotated), axis=1)
+
     '''
     res_image = cv2.cvtColor(res_image, cv2.COLOR_GRAY2BGR)
     offset = grey_image.shape[1]
@@ -114,9 +128,9 @@ if __name__ == "__main__":
     kp2 = [cv2.KeyPoint(coords[1], coords[0], 1) for coords in angles2]
     descriptors1 = np.array(descriptors1)
     descriptors2 = np.array(descriptors2)
-    bf = cv2.BFMatcher(cv2.NORM_HAMMING2, crossCheck=True)
+    bf = cv2.BFMatcher(cv2.NORM_HAMMING2)
     matches = bf.match(descriptors1, descriptors2)
     matches = sorted(matches, key=lambda x: x.distance)
-    img3 = cv2.drawMatches(grey_image, kp1, grey_image_rotated, kp2, matches[:20], res_image,flags=2)
+    img3 = cv2.drawMatches(grey_image, kp1, grey_image_rotated, kp2, matches[:10], res_image, flags=2)
 
     show_image(img3)
