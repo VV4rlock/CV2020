@@ -9,20 +9,21 @@ class RotatedBRIEF:
         np.random.seed(1)
         assert mode in self.modes
         self.R = S // 2
+        self.S = S
         self.X = np.zeros((bitsize, 2))
         self.Y = np.zeros((bitsize, 2))
         if mode == self.modes[0]:
-            self.random_func = lambda x: (np.random.uniform(-S / 2, S / 2, x), np.random.uniform(-S / 2, S / 2, x))
+            self.random_func = lambda x: (np.random.uniform(-S / 2, S / 2, (x,2)), np.random.uniform(-S / 2, S / 2, (x,2)))
         elif mode == self.modes[1]:
             def random_func(x):
-                res0 = np.random.normal(0, S * S / 25, x)
-                return res0, np.random.normal(res0, S*S/100, x)
+                res0 = np.random.normal(0, S * S / 25, (x,2))
+                return res0, np.random.normal(res0, S*S/100, (x,2))
             self.random_func=random_func
         else:
             raise Exception("WTF?!")
         index = 0
         while index < bitsize:
-            x, y = self.random_func((1, 2))
+            x, y = self.random_func(1)
             if max(np.abs(x).max(), np.abs(y).max()) <= self.R:
                 self.X[index] = x
                 self.Y[index] = y
@@ -54,17 +55,31 @@ class RotatedBRIEF:
         for test in ['place_for_tests_patches']:
             pass
 
-    def get_decorelated_tests(self, test_patches):
-        T_x = self.random_func((1000, 1))
-        T_y = self.random_func((1000, 1))
-        test_sum = np.zeros(1000, dtype=np.float32)
-        for test_patch in test_patches:
-            test_sum += test_patch[T_x] < test_patch[T_y]
-        test_sum /= len(test_patches)
+    def hamming_correlation(self, x, n):
+        return max([max(np.abs(np.sum(x ^ raw[:i], axis=1) / n - .5).max(), np.abs(np.sum(x ^ raw[i + 1:], axis=1) / n - .5).max())
+                                            for i, raw in enumerate(x)])
+
+    def get_decorelated_tests(self, test_patches, bitsize=128):
+        gamma = 0.1
+        test_count = 1000
+        T_x, T_y = np.random.uniform(-self.S / 2, self.S / 2, (test_count,2)), np.random.uniform(-self.S / 2, self.S / 2, (test_count,2))
+        T_x, T_y = np.round(T_x).astype(np.int8), np.round(T_y).astype(np.int8)
+        test_patches_len = len(test_patches)
+        test_set = np.zeros((test_patches_len, test_count), dtype=np.float32)
+        for i, test_patch in enumerate(test_patches):
+            test_set[i] = test_patch[T_x] < test_patch[T_y]
+        test_sum = np.sum(test_set, axis=0)
+        test_sum /= test_patches_len
         indexes = np.argsort(np.abs(test_sum - .5))
-        R = []
-        for index in indexes:
-            t = T_x[index], T_y[index]
+        R = [indexes[0]]
+        l = 1
+        for index in indexes[1:]:
+            if self.hamming_correlation(test_set[:, R + [index]], l + 1) < gamma:
+                R += [index]
+                l += 1
+                if l == bitsize:
+                    pass
+
 
 
 
