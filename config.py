@@ -2,6 +2,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 import logging
+from os import listdir
+import os.path as os_path
+from random import shuffle
 
 logging.basicConfig(format="[%(filename)s: %(funcName)s] %(message)s", level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -9,7 +12,12 @@ SMALL_SCREEN = False
 
 #IMAGE_PATH = r"shape.png"
 IMAGE_PATH = r"house.jpg"
-
+BRIEF_PATCH = 'patch256.pickle' # путь к патчу
+VOC_PATH = r'VOC2005_1/PNGImages'
+PRINT_PATCH = True # отрисовка патча
+GENERATE_TEST_PATHCES = False # нахождение клбчевых точек и их вырезание)
+DUMP_TESTPATCHES_FILENAME = "test_patches.pickle" # имя файла для сохранения тестовых ключевых точек
+BRIEF_BITSIZE = 256  # размер генерируемого декоррелированного патча
 
 
 def show_image(img, name='image'):
