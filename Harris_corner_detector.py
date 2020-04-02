@@ -4,8 +4,25 @@ logger = logging.getLogger(__name__)
 K = 0.05
 T = 100
 
+N = 2
 
-def shi_tomasi_response(a,b,c):
+ONES = np.ones((2 * N + 1, 2 * N + 1), dtype=np.float32)
+GAUSSIAN = np.array([  [ 1,  4,  7,  4,  1],
+                       [ 4, 16, 26, 16,  4],
+                       [ 7, 26, 41, 26,  7],
+                       [ 4, 16, 26, 16,  4],
+                       [ 1,  4,  7,  4,  1]], dtype=np.float32)
+
+LUCAS_CANADE = (np.array([-1, 8, 0, -8, 1]) / 12).reshape(-1, 1)
+PREWITT = np.array([[1, 1, 1],
+                    [0, 0, 0],
+                    [-1, -1, -1]])
+SOBEL = np.array([[1, 2, 1],
+                    [0, 0, 0],
+                    [-1, -2, -1]])
+
+
+def shi_tomasi_response(a, b, c):
     return (a + c - (4*b*b + (a-c)**2) ** 0.5) / 2
 
 
@@ -17,7 +34,7 @@ RESPONSE_FUNC = harris_response
 W = ONES
 W = W / W.sum()
 
-y_kernel = PREWITT
+y_kernel = SOBEL
 x_kernel = y_kernel.T
 #logger.info("x:\n{}\ny:{}".format(x_kernel, y_kernel))
 
@@ -75,8 +92,8 @@ def compare(img1, img2):
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
-def harris_corner_detection(img: np.ndarray):
-    grey_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+def get_harris_response(grey_image):
     grey_image_work = grey_image.astype(np.float64)
     Ix = filter(grey_image_work, x_kernel)
     Iy = filter(grey_image_work, y_kernel)
@@ -86,7 +103,14 @@ def harris_corner_detection(img: np.ndarray):
     Sxy = filter(Ix * Iy, W)
 
     response = RESPONSE_FUNC(Sx2, Sxy, Sy2)
-    response = (normalize(NMS(response)) * 255).astype(np.uint8)
+    response = (normalize(response) * 255).astype(np.uint8)
+    return response
+
+
+def harris_corner_detection(img: np.ndarray):
+    grey_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    response = harris_response(grey_image)
+    #show_image(response)
     response[response < T] = 0
     #hist, edges = np.histogram(response, range(257))
     #plt.hist(response)
@@ -101,7 +125,6 @@ def harris_corner_detection(img: np.ndarray):
         #cv2.rectangle(grey_image, (x, y), (x + w, y + h), (0, 0, 0), 2)
         cv2.circle(img, (x + w//2, y + h // 2), 10, color, 2)
     show_image(img)
-
 
 
 
