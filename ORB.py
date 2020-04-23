@@ -6,7 +6,7 @@ from BRIEF import RotatedBRIEF
 
 
 class ORB:
-    def __init__(self, S=31, bitsize=256, fast_radius=9, oriented_FAST_radius=20, FAST_threshold = 20, Harris_threshold=110, file_with_BRIEFpatch=None):
+    def __init__(self, S=31, bitsize=256, fast_radius=9, oriented_FAST_radius=20, FAST_threshold = 10, Harris_threshold=90, file_with_BRIEFpatch=None):
         self.FAST_Radius = fast_radius
         self.OFAST_Radius = oriented_FAST_radius
         self.S = S
@@ -16,9 +16,10 @@ class ORB:
         self.nms_zone = self.FAST_Radius
         self.get_descriptors = RotatedBRIEF(S=S, bitsize=bitsize, mode="GIII", file_with_patch=file_with_BRIEFpatch)
         self.Harris_threshold = Harris_threshold
-        self.offset = max(int(self.S * 2**.5 // 2) + 1, self.FAST_Radius, self.OFAST_Radius)
+        self.offset = max(int(self.S * 2**.5 // 2) + 2, self.FAST_Radius, self.OFAST_Radius)
         #self.scales = [1, 1/2**0.5, 1/2, 1/(2*2**0.5)]
-        self.scales = [1, 1 / 2 ** 0.5, 1 / 2, 1 / (2 * 2 ** 0.5), 1/4 , 1/(4*2**0.5), 1/8]
+        #self.scales = [1, 1 / 2 ** 0.5, 1 / 2, 1 / (2 * 2 ** 0.5), 1/4 , 1/(4*2**0.5), 1/8]
+        self.scales = [1, 1 / 2 ** 0.5, 1 / 2, 1 / (2 * 2 ** 0.5), 1/4 ]
 
     def NMS(self, image: np.ndarray, n=9) -> np.ndarray:
         H, W = image.shape
@@ -28,19 +29,18 @@ class ORB:
                 image[i, j] = 0
         return image
 
-
     def get_test_patches(self):
         print("Searching keypoints")
         diag = int(self.S * 2**.5 // 2) + 1
         nrof_keypoints = 100000
         test_pathes = []
         names = []
-        dirs = [os_path.join(VOC_PATH, i) for i in listdir(VOC_PATH)]
+        dirs = [os_path.join(VOC_PATH, i) for i in listdir(f"{VOC_PATH}/PNGImages")]
         for dir in dirs:
             names += [os_path.join(dir, i) for i in listdir(dir)]
         shuffle(names)
         count=0
-        for i,name in enumerate(names):
+        for i, name in enumerate(names):
             print(f"\rhandling {i}/{len(names)}: {name}; current nrof_keypoints={count}/{nrof_keypoints}",end="")
             img = cv2.imread(name)
             img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -94,7 +94,7 @@ class ORB:
         res = np.zeros((0, 2), dtype=np.uint32)
         descriptors_out = np.zeros((0, self.bitsize), dtype=np.uint8)
         for scale in self.scales:
-            print(f"scale {scale}")
+            #print(f"scale {scale}")
             x_resize, y_resize = int(image.shape[1] * scale), int(image.shape[0] * scale)
             if x_resize < self.offset * 2 or y_resize < self.offset * 2:
                 continue
@@ -121,11 +121,14 @@ class ORB:
 
         return res, descriptors_out
 
+K_SIZE = 5
 if __name__ == "__main__":
     img_input = cv2.imread(IMAGE_PATH)
     grey_image = cv2.cvtColor(img_input, cv2.COLOR_BGR2GRAY)
     orb = ORB(file_with_BRIEFpatch=BRIEF_PATCH)
     grey_image = np.pad(grey_image, 20, mode='constant')
+    kernel = np.ones((K_SIZE, K_SIZE), np.float32) / (K_SIZE * K_SIZE)
+    grey_image = cv2.filter2D(grey_image, -1, kernel)
 
     image_center = tuple(np.array(grey_image.shape[1::-1]) / 2)
     grey_image_rotated = cv2.warpAffine(grey_image, cv2.getRotationMatrix2D(image_center, 30, 1.0) , grey_image.shape[1::-1], flags=cv2.INTER_LINEAR)
@@ -162,6 +165,6 @@ if __name__ == "__main__":
     bf = cv2.BFMatcher(cv2.NORM_HAMMING2)
     matches = bf.match(descriptors1, descriptors2)
     matches = sorted(matches, key=lambda x: x.distance)
-    img3 = cv2.drawMatches(grey_image, kp1, grey_image_rotated, kp2, matches[:20], res_image, flags=2)
+    img3 = cv2.drawMatches(grey_image, kp1, grey_image_rotated, kp2, matches[:30], res_image, flags=2)
 
     show_image(img3)

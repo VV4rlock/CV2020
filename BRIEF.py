@@ -187,7 +187,7 @@ class RotatedBRIEF:
 
 
 if __name__ == "__main__":
-    br = RotatedBRIEF()
+    br = RotatedBRIEF(mode="GI")
     br.construct_decorelted_patch()
     #from ORB import ORB
     #orb = ORB()
