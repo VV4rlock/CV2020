@@ -157,8 +157,6 @@ class RotatedBRIEF:
         with open(f"patch{BRIEF_BITSIZE}.pickle", "wb") as f:
             pickle.dump((T_x, T_y), f)
 
-
-
     @staticmethod
     def get_integral_image(image):
         return np.cumsum(np.cumsum(image.astype(np.float64), axis=1), axis=0)
@@ -166,22 +164,15 @@ class RotatedBRIEF:
     def __call__(self, image, angles_coord, theta):
         assert len(angles_coord) == len(theta)
         desctiptors = []
-        integral = self.get_integral_image(image) / 25
+        integral = self.get_integral_image(image)
+        integral[3:-2, 3:-2] = integral[5:, 5:] + integral[:-5, :-5] - integral[5:, :-5] - integral[:-5, 5:]
+
         for i, coord in enumerate(angles_coord):
             coord = angles_coord[i]
             patch1, patch2 = self.coord_by_andle[np.abs(self.angles_array - theta[i]).argmin()]
-            #keypoint_pos1 = (patch1[:, 0] + coord[0], patch1[:, 1] + coord[1])
-            #keypoint_pos2 = (patch2[:, 0] + coord[0], patch2[:, 1] + coord[1])
-            #print(f"coord: {coord}\n{keypoint_pos1}\n{np.abs(self.angles_array - theta[i]).argmin()}\n{patch1}")
-            mid1 = integral[(patch1[:, 0] + coord[0] + 2, patch1[:, 1] + coord[1] + 2)] - \
-                integral[(patch1[:, 0] + coord[0] + 2, patch1[:, 1] + coord[1] - 3)] - \
-                integral[(patch1[:, 0] + coord[0] - 3, patch1[:, 1] + coord[1] + 2)] + \
-                integral[(patch1[:, 0] + coord[0] - 3, patch1[:, 1] + coord[1] - 3)]
-            mid2 = integral[(patch2[:, 0] + coord[0] + 2, patch2[:, 1] + coord[1] + 2)] - \
-                   integral[(patch2[:, 0] + coord[0] + 2, patch2[:, 1] + coord[1] - 3)] - \
-                   integral[(patch2[:, 0] + coord[0] - 3, patch2[:, 1] + coord[1] + 2)] + \
-                   integral[(patch2[:, 0] + coord[0] - 3, patch2[:, 1] + coord[1] - 3)]
-            descriptor = mid1 < mid2
+            mid1 = (patch1[:, 0] + coord[0], patch1[:, 1] + coord[1])
+            mid2 = (patch2[:, 0] + coord[0], patch2[:, 1] + coord[1])
+            descriptor = integral[mid1] < integral[mid2]
             desctiptors.append(descriptor)
         return np.array(desctiptors, dtype=np.uint8)
 

@@ -6,7 +6,7 @@ from BRIEF import RotatedBRIEF
 
 
 class ORB:
-    def __init__(self, S=31, bitsize=256, fast_radius=9, oriented_FAST_radius=20, FAST_threshold = 10, Harris_threshold=90, file_with_BRIEFpatch=None):
+    def __init__(self, S=31, bitsize=256, fast_radius=9, oriented_FAST_radius=20, FAST_threshold = 10, Harris_threshold=30, file_with_BRIEFpatch=None):
         self.FAST_Radius = fast_radius
         self.OFAST_Radius = oriented_FAST_radius
         self.S = S
@@ -19,7 +19,7 @@ class ORB:
         self.offset = max(int(self.S * 2**.5 // 2) + 2, self.FAST_Radius, self.OFAST_Radius)
         #self.scales = [1, 1/2**0.5, 1/2, 1/(2*2**0.5)]
         #self.scales = [1, 1 / 2 ** 0.5, 1 / 2, 1 / (2 * 2 ** 0.5), 1/4 , 1/(4*2**0.5), 1/8]
-        self.scales = [1, 1 / 2 ** 0.5, 1 / 2, 1 / (2 * 2 ** 0.5), 1/4 ]
+        self.scales = [1, 1 / 2 ** 0.5, 1 / 2, 1 / (2 * 2 ** 0.5), 1/4]
 
     def NMS(self, image: np.ndarray, n=9) -> np.ndarray:
         H, W = image.shape
@@ -35,7 +35,7 @@ class ORB:
         nrof_keypoints = 100000
         test_pathes = []
         names = []
-        dirs = [os_path.join(VOC_PATH, i) for i in listdir(f"{VOC_PATH}/PNGImages")]
+        dirs = [os_path.join(VOC_TRAIN_PATH, i) for i in listdir(f"{VOC_TRAIN_PATH}/PNGImages")]
         for dir in dirs:
             names += [os_path.join(dir, i) for i in listdir(dir)]
         shuffle(names)
@@ -94,20 +94,22 @@ class ORB:
         res = np.zeros((0, 2), dtype=np.uint32)
         descriptors_out = np.zeros((0, self.bitsize), dtype=np.uint8)
         for scale in self.scales:
+            logger.debug(f"scale {scale}")
             #print(f"scale {scale}")
             x_resize, y_resize = int(image.shape[1] * scale), int(image.shape[0] * scale)
             if x_resize < self.offset * 2 or y_resize < self.offset * 2:
                 continue
             img = cv2.resize(image, (x_resize, y_resize))
 
-
-            harris = get_harris_response(img)
             angles, theta = oriented_FAST(img, R=self.OFAST_Radius, fast_radius=self.FAST_Radius,
                                           fast_threshold=self.FAST_threshold, offset=self.offset)
-
+            logger.debug(f"found {len(angles)} keypoints")
             if len(angles) == 0:
                 continue
+
+            harris = get_harris_response(img)
             angles, theta = self.separate_by_harris_response(harris, angles, theta, harris_threshhold=self.Harris_threshold)
+            logger.debug(f"after harris separate left {len(angles)} keypoints")
 
             if len(angles) == 0:
                 continue
@@ -119,9 +121,10 @@ class ORB:
             #print(f"restored: \n{res}")
             descriptors_out = np.concatenate((descriptors_out, descriptors), axis=0)
 
+        logger.debug(f"ORB found {len(res)} keypoints")
         return res, descriptors_out
 
-K_SIZE = 5
+K_SIZE = 1
 if __name__ == "__main__":
     img_input = cv2.imread(IMAGE_PATH)
     grey_image = cv2.cvtColor(img_input, cv2.COLOR_BGR2GRAY)
@@ -162,7 +165,7 @@ if __name__ == "__main__":
     kp2 = [cv2.KeyPoint(coords[1], coords[0], 1) for coords in angles2]
     descriptors1 = np.array(descriptors1)
     descriptors2 = np.array(descriptors2)
-    bf = cv2.BFMatcher(cv2.NORM_HAMMING2)
+    bf = cv2.BFMatcher(cv2.NORM_HAMMING)
     matches = bf.match(descriptors1, descriptors2)
     matches = sorted(matches, key=lambda x: x.distance)
     img3 = cv2.drawMatches(grey_image, kp1, grey_image_rotated, kp2, matches[:30], res_image, flags=2)

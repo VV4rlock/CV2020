@@ -10,10 +10,11 @@ logging.basicConfig(format="[%(filename)s: %(funcName)s] %(message)s", level=log
 logger = logging.getLogger(__name__)
 SMALL_SCREEN = False
 
-#IMAGE_PATH = r"blox.jpg"
-IMAGE_PATH = r"house.jpg"
+IMAGE_PATH = r"blox.jpg"
+#IMAGE_PATH = r"house.jpg"
 BRIEF_PATCH = 'patch256.pickle' # путь к патчу
-VOC_PATH = r'VOC2005_1'
+VOC_TRAIN_PATH = r'VOC2005_1'
+VOC_TEST_PATH = r'VOC2005_2'
 PRINT_PATCH = False # отрисовка патча
 GENERATE_TEST_PATHCES = False # нахождение клбчевых точек и их вырезание)
 DUMP_TESTPATCHES_FILENAME = "test_patches.pickle" # имя файла для сохранения тестовых ключевых точек
