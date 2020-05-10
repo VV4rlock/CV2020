@@ -3,10 +3,12 @@ from ORB import ORB
 import re
 from sklearn_extra.cluster import KMedoids
 from sklearn.cluster import KMeans
+from sklearn.metrics import average_precision_score
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
+import pickle
 
 def term_frequency_encoding(descriptors, claster_obj):
     descriptors = np.unpackbits(descriptors, axis=1)
@@ -32,7 +34,7 @@ label_matcher = re.compile(rf'.*({"|".join(CLASSES)})+.*')
 
 ENCODING_FUNC = binary_encoding
 ONE_CLASS_DESCRIPTOR_COUNT = 8000
-NROF_CLASTERS = 3000
+NROF_CLASTERS = 1500
 USE_ALL_DESCRIPTORS_FOR_CLASTERING = False
 GENERATE_DESCRIPTORS = False
 MEDOIDS_DISTANCE_TO_INCLUDE = 3 # близость к медоиду
@@ -136,10 +138,11 @@ def k_medoids():
 class MLP(nn.Module):
     def __init__(self):
         super(MLP, self).__init__()
+        hidden = 10
         self.layers = nn.Sequential(
-            nn.Linear(NROF_CLASTERS, 100),
+            nn.Linear(NROF_CLASTERS, hidden),
             nn.ReLU(),
-            nn.Linear(100, len(CLASSES))
+            nn.Linear(hidden, len(CLASSES))
         )
 
     def forward(self, x):
@@ -148,33 +151,25 @@ class MLP(nn.Module):
 
 
 class VOCDataset(Dataset):
-    def __init__(self,voc_path, medoids_object, encoding_func):
+    def __init__(self, voc_path, medoids_object, encoding_func, inverted_doc_fq=False):
         self.samples = []
+        self.labels = []
 
-        '''
-        dirs_by_class = {i: [] for i in CLASSES}
-        dirs = [os_path.join(voc_path, "PNGImages", i) for i in listdir(os_path.join(voc_path, "PNGImages"))]
+        dump_to_file = False
+        load_from_file = False
+        if load_from_file:
+            with open(f"vectors{voc_path}.pickle", 'rb') as f:
+                self.samples, self.labels = pickle.load(f)
+            return
 
-        for dir in dirs:
-            for _class in CLASSES:
-                if _class in dir:
-                    dirs_by_class[_class].append(dir)
-
-        for index, _class in enumerate(CLASSES):
-            for dir in dirs_by_class[_class]:
-                for image_filename in listdir(dir):
-                    image = cv2.imread(os_path.join(dir, image_filename))
-                    kp, descriptors = clastering_orb.detectAndCompute(image, None)
-                    x_t = encoding_func(descriptors, medoids_object)
-                    self.samples.append((torch.tensor(x_t).float(), index))
-        '''
         names = []
         dirs = [os_path.join(voc_path, "Annotations", i) for i in
                 listdir(os_path.join(voc_path, "Annotations"))]
         for dir in dirs:
             names += [os_path.join(dir, i) for i in listdir(dir)]
 
-        names = names
+        #names = names
+        termfq = np.zeros(NROF_CLASTERS)
         im_count = len(names)
         for im_index, name in enumerate(names):
             try:
@@ -197,25 +192,50 @@ class VOCDataset(Dataset):
                     kp, descriptors = clastering_orb.detectAndCompute(grey_image, None)
 
                     if kp:
-                        x = encoding_func(descriptors, medoid_obj)
-                        self.samples.append((torch.tensor(x).float(), CLASSES.index(classes[0])))
+                        x = encoding_func(descriptors, medoids_object)
+                        self.samples.append(torch.tensor(x).float())
+                        self.labels.append(CLASSES.index(classes[0]))
+                        termfq[x > 0] += 1
             except Exception as e:
                 logger.exception(e)
+
+        print(termfq)
+        termfq = np.log(len(names)/termfq)
+
+        if inverted_doc_fq:
+            for index in range(len(self.samples)):
+                self.samples[index] = self.samples[index]*termfq
+
+        if dump_to_file:
+            with open(f"vectors{voc_path}.pickle", "wb") as f:
+                pickle.dump((self.samples, self.labels), f)
+
         print(f"VOC SIZE of {voc_path} is {len(self.samples)}")
 
     def __len__(self):
         return len(self.samples)
 
     def __getitem__(self, index):
-        return self.samples[index]
+        return self.samples[index], self.labels[index]
+
+
+def mAP(correct, outs, labels):
+    s = 0
+    for k in range(len(CLASSES)):
+        #indices = np.where(labels == k)
+        s += average_precision_score(correct, outs[:, k])
+        #print(f"{k}: {s}")
+    return s/len(CLASSES)
 
 
 
 def learn_MLP(medoids_obj, encoding_func):
+    batchsize = 32
     train_dataset = VOCDataset(VOC_TRAIN_PATH, medoids_obj, encoding_func)
     test_dataset = VOCDataset(VOC_TEST_PATH, medoids_obj, encoding_func)
-    train_loader = DataLoader(dataset=train_dataset, batch_size=32, shuffle=True)
-    test_loader = DataLoader(dataset=test_dataset, batch_size=32, shuffle=False)
+    train_loader = DataLoader(dataset=train_dataset, batch_size=batchsize, shuffle=True)
+    test_loader = DataLoader(dataset=test_dataset, batch_size=batchsize, shuffle=False)
+
     model = MLP()
     print(model)
     print(f"Train dataset size: {len(train_dataset)}")
@@ -225,13 +245,24 @@ def learn_MLP(medoids_obj, encoding_func):
     mean_train_losses = []
     mean_test_losses = []
     test_acc_list = []
-    epochs = 30
+    train_acc_list = []
+    epochs = 10
+    softmax = torch.nn.Softmax(dim=1)
 
     for epoch in range(epochs):
+
+
+
         model.train()
 
         train_losses = []
         test_losses = []
+        correct = 0
+        total = 0
+        outs = []
+        labels_vec = []
+        correct_vec = []
+
         for i, (images, labels) in enumerate(train_loader):
 
             optimizer.zero_grad()
@@ -242,10 +273,28 @@ def learn_MLP(medoids_obj, encoding_func):
             optimizer.step()
 
             train_losses.append(loss.item())
+            _, predicted = torch.max(outputs.data, 1)
+            correct += (predicted == labels).sum().item()
+            total += labels.size(0)
+
+            outs.append(softmax(outputs.data).numpy())
+            labels_vec.append(labels.data.numpy())
+            correct_vec.append((predicted == labels).data.numpy())
+
+        train_accuracy = 100 * correct / total
+        train_acc_list.append(train_accuracy)
+
+        outs = np.vstack(outs)
+        labels_vec = np.concatenate(labels_vec)
+        correct_vec = np.concatenate(correct_vec)
+        train_map = mAP(correct_vec, outs, labels_vec)
 
         model.eval()
         correct = 0
         total = 0
+        outs = []
+        labels_vec = []
+        correct_vec = []
         with torch.no_grad():
             for i, (images, labels) in enumerate(test_loader):
                 outputs = model(images)
@@ -257,13 +306,22 @@ def learn_MLP(medoids_obj, encoding_func):
                 correct += (predicted == labels).sum().item()
                 total += labels.size(0)
 
+                outs.append(softmax(outputs.data).numpy())
+                labels_vec.append(labels.data.numpy())
+                correct_vec.append((predicted == labels).data.numpy())
+
         mean_train_losses.append(np.mean(train_losses))
         mean_test_losses.append(np.mean(test_losses))
 
+        outs = np.vstack(outs)
+        labels_vec = np.concatenate(labels_vec)
+        correct_vec = np.concatenate(correct_vec)
+        test_map = mAP(correct_vec, outs, labels_vec)
+
         accuracy = 100 * correct / total
         test_acc_list.append(accuracy)
-        print('epoch : {}, train loss : {:.4f}, test loss : {:.4f}, test acc : {:.2f}%' \
-              .format(epoch + 1, np.mean(train_losses), np.mean(test_losses), accuracy))
+        print('epoch : {}, train/test loss : ({:.4f} / {:.4f}) acc : ({:.2f}% / {:.2f}%) map: ({:.4f} / {:.4f}) '\
+              .format(epoch + 1, np.mean(train_losses), np.mean(test_losses), train_accuracy, accuracy, train_map, test_map))
 
     fig, (ax1, ax2) = plt.subplots(nrows=1, ncols=2, figsize=(15, 10))
     ax1.plot(mean_train_losses, label='train')
@@ -276,8 +334,7 @@ def learn_MLP(medoids_obj, encoding_func):
     plt.show()
 
 
-
-if __name__=="__main__":
+if __name__ == "__main__":
     if GENERATE_DESCRIPTORS:
         dump_descriptors_to_file(DESCRIPTOR_DUMP_FILENAME)
     medoid_obj = k_medoids()
