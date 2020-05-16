@@ -33,10 +33,10 @@ def drawMatches(obj, kp1, scene, kp2, matches, mask=None):
     return img
 
 
-
 def hamming_distance(vec1, vec2):
     assert vec1.ndim == 1
     return (vec1 ^ vec2).sum(axis=1)
+
 
 class match():
     def __init__(self, queryIdx, trainIdx, distance=0):

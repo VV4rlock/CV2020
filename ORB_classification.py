@@ -38,7 +38,8 @@ NROF_CLASTERS = 1500
 USE_ALL_DESCRIPTORS_FOR_CLASTERING = False
 GENERATE_DESCRIPTORS = False
 MEDOIDS_DISTANCE_TO_INCLUDE = 3 # близость к медоиду
-
+USE_CLASTERING = False
+DUMP_DATASETS_TO_FILE = False
 clastering_orb = cv2.ORB_create()
 orb = cv2.ORB_create()
 
@@ -151,14 +152,13 @@ class MLP(nn.Module):
 
 
 class VOCDataset(Dataset):
-    def __init__(self, voc_path, medoids_object, encoding_func, inverted_doc_fq=False):
+    def __init__(self, voc_path, medoids_object, encoding_func, inverted_doc_fq=False, is_train=True):
         self.samples = []
         self.labels = []
 
-        dump_to_file = False
-        load_from_file = False
-        if load_from_file:
-            with open(f"vectors{voc_path}.pickle", 'rb') as f:
+        if medoids_object is None:
+            file = "vectorsVOC2005_{}.pickle".format("1" if is_train else "2")
+            with open(file, 'rb') as f:
                 self.samples, self.labels = pickle.load(f)
             return
 
@@ -206,8 +206,9 @@ class VOCDataset(Dataset):
             for index in range(len(self.samples)):
                 self.samples[index] = self.samples[index]*termfq
 
-        if dump_to_file:
-            with open(f"vectors{voc_path}.pickle", "wb") as f:
+        if DUMP_DATASETS_TO_FILE:
+            file = "vectorsVOC2005_{}.pickle".format("1" if is_train else "2")
+            with open(file, "wb") as f:
                 pickle.dump((self.samples, self.labels), f)
 
         print(f"VOC SIZE of {voc_path} is {len(self.samples)}")
@@ -231,8 +232,8 @@ def mAP(correct, outs, labels):
 
 def learn_MLP(medoids_obj, encoding_func):
     batchsize = 32
-    train_dataset = VOCDataset(VOC_TRAIN_PATH, medoids_obj, encoding_func)
-    test_dataset = VOCDataset(VOC_TEST_PATH, medoids_obj, encoding_func)
+    train_dataset = VOCDataset(VOC_TRAIN_PATH, medoids_obj, encoding_func, is_train=True)
+    test_dataset = VOCDataset(VOC_TEST_PATH, medoids_obj, encoding_func, is_train=False)
     train_loader = DataLoader(dataset=train_dataset, batch_size=batchsize, shuffle=True)
     test_loader = DataLoader(dataset=test_dataset, batch_size=batchsize, shuffle=False)
 
@@ -246,12 +247,10 @@ def learn_MLP(medoids_obj, encoding_func):
     mean_test_losses = []
     test_acc_list = []
     train_acc_list = []
-    epochs = 10
+    epochs = 15
     softmax = torch.nn.Softmax(dim=1)
 
     for epoch in range(epochs):
-
-
 
         model.train()
 
@@ -337,7 +336,10 @@ def learn_MLP(medoids_obj, encoding_func):
 if __name__ == "__main__":
     if GENERATE_DESCRIPTORS:
         dump_descriptors_to_file(DESCRIPTOR_DUMP_FILENAME)
-    medoid_obj = k_medoids()
+    if USE_CLASTERING:
+        medoid_obj = k_medoids()
+    else:
+        medoid_obj = None
     learn_MLP(medoid_obj, ENCODING_FUNC)
 
 
