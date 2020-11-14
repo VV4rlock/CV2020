@@ -77,6 +77,7 @@ def oriented_FAST(grey_image: np.ndarray, R=9, fast_radius=9, fast_threshold=100
         m10[index] = (mask * part * X).sum()
 
     theta = np.arctan2(m01, m10)
+    theta[theta < 0] += 2*np.pi
 
     return angles, theta
 
