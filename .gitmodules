@@ -1,3 +1,6 @@
 [submodule "Computer_Vision_course_students"]
 	path = Computer_Vision_course_students
 	url = git@github.com:Vlad9n/Computer_Vision_course_students.git
+[submodule "Advanced_Computer_Vision_course_students"]
+	path = Advanced_Computer_Vision_course_students
+	url = https://github.com/VV4rlock/Advanced_Computer_Vision_course_students
