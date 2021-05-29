@@ -1,4 +1,4 @@
-Computer vision course 2020 <br>
+Computer vision course <br>
 keypoints detecting: <br>
  - BRIEF
  - FAST_corner_detector
